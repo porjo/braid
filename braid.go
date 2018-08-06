@@ -2,7 +2,9 @@
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
+
 	http://www.apache.org/licenses/LICENSE-2.0
+
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -42,19 +44,26 @@ const DefaultJobs = 5
 
 type Request struct {
 	jobs int
-	file *os.File
-	ctx  context.Context
+	url  string
 	wg   sync.WaitGroup
 	mu   sync.Mutex
+
+	// these are covered by mutex
+	file  *os.File
+	stats []Stat
+}
+
+type Stat struct {
+	TotalBytes int64
+	ReadBytes  int64
 }
 
 // NewRequest returns a new request.
 // Filename must be writable, will be created if missing and will be truncated.
-func NewRequest(ctx context.Context, filename string) (*Request, error) {
+func NewRequest(filename string) (*Request, error) {
 	var err error
 
 	r := &Request{
-		ctx:  ctx,
 		jobs: DefaultJobs,
 	}
 
@@ -71,13 +80,27 @@ func (r *Request) SetJobs(jobs int) {
 	r.jobs = jobs
 }
 
+// Stats retrieves current statistics. It is thread safe and can be called from a goroutine.
+func (r *Request) Stats() Stat {
+	stat := Stat{}
+	r.mu.Lock()
+	for _, s := range r.stats {
+		stat.TotalBytes += s.TotalBytes
+		stat.ReadBytes += s.ReadBytes
+	}
+	r.mu.Unlock()
+
+	return stat
+}
+
 // Fetch fetches the resource, returning the result as an *os.File.
-func (r *Request) Fetch(url string) (*os.File, error) {
+func (r *Request) Fetch(ctx context.Context, url string) (*os.File, error) {
 	var err error
 	var length int
 	var res *http.Response
 
-	res, err = http.Head(url)
+	r.url = url
+	res, err = http.Head(r.url)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching HEAD: %s\n", err)
 	}
@@ -93,9 +116,12 @@ func (r *Request) Fetch(url string) (*os.File, error) {
 	}
 	chunkSize := length / r.jobs
 	chunkSizeLast := length % r.jobs
-	logger("content length %d, chunksize %d, last %d\n", length, chunkSize, chunkSizeLast)
 
+	r.stats = make([]Stat, r.jobs)
 	r.wg.Add(r.jobs)
+
+	logger("fetching %s\n", r.url)
+	logger("launching %d jobs\n", r.jobs)
 
 	for i := 0; i < r.jobs; i++ {
 
@@ -106,7 +132,8 @@ func (r *Request) Fetch(url string) (*os.File, error) {
 			max += chunkSizeLast
 		}
 
-		go fetch(r.ctx, min, max, url, r.file, &r.wg, &r.mu)
+		r.stats[i].TotalBytes = int64(max - min)
+		go r.fetch(ctx, min, max, i)
 
 	}
 	r.wg.Wait()
@@ -114,22 +141,18 @@ func (r *Request) Fetch(url string) (*os.File, error) {
 	return r.file, nil
 }
 
-func fetch(ctx context.Context, min int, max int, url string, file *os.File, wg *sync.WaitGroup, mu *sync.Mutex) {
+func (r *Request) fetch(ctx context.Context, min int, max int, jobID int) {
 	client := &http.Client{}
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest("GET", r.url, nil)
 	if err != nil {
-		logger("a: %s\n", err)
 		return
 	}
 	req = req.WithContext(ctx)
 	range_header := "bytes=" + strconv.Itoa(min) + "-" + strconv.Itoa(max-1)
 	req.Header.Add("Range", range_header)
 
-	logger("fetch range %d-%d\n", min, max)
-
 	resp, err := client.Do(req)
 	if err != nil {
-		logger("a: %s\n", err)
 		return
 	}
 	defer resp.Body.Close()
@@ -144,17 +167,16 @@ func fetch(ctx context.Context, min int, max int, url string, file *os.File, wg 
 			if err == io.EOF {
 				end = true
 			} else {
-				logger("b: %s\n", err)
 				return
 			}
 		}
 		var count int
-		mu.Lock()
-		count, err = file.WriteAt(line, int64(min+read))
-		mu.Unlock()
+		r.mu.Lock()
+		count, err = r.file.WriteAt(line, int64(min+read))
 		read += len(line)
+		r.stats[jobID].ReadBytes = int64(read)
+		r.mu.Unlock()
 		if err != nil {
-			logger("c: %s\n", err)
 			return
 		}
 
@@ -167,5 +189,5 @@ func fetch(ctx context.Context, min int, max int, url string, file *os.File, wg 
 			break
 		}
 	}
-	wg.Done()
+	r.wg.Done()
 }

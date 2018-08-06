@@ -1,3 +1,17 @@
+/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package main
 
 import (
@@ -6,9 +20,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/porjo/braid"
 )
+
+type chanChan chan chan struct{}
 
 func main() {
 	var url, filename string
@@ -26,18 +43,42 @@ func main() {
 		os.Exit(1)
 	}
 
-	var b *braid.Request
+	var r *braid.Request
 	ctx := context.Background()
-	b, err = braid.NewRequest(ctx, filename)
+	r, err = braid.NewRequest(filename)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	b.SetJobs(2)
+	r.SetJobs(2)
 	braid.SetLogger(log.Printf)
-	_, err = b.Fetch(url)
+	var quitChan chanChan
+	quitChan = make(chanChan)
+	go func() {
+		Progress(quitChan, r)
+	}()
+	_, err = r.Fetch(ctx, url)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
+	}
+	quit := make(chan struct{})
+	quitChan <- quit
+	<-quit
+}
+
+func Progress(quitChan chanChan, r *braid.Request) {
+	ticker := time.Tick(time.Second)
+	for {
+		select {
+		case <-ticker:
+			stats := r.Stats()
+			fmt.Printf("%+v\n", stats)
+		case ch := <-quitChan:
+			// final newline
+			fmt.Println()
+			close(ch)
+			return
+		}
 	}
 }
