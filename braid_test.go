@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-func TestClient(t *testing.T) {
+func TestFetchFile(t *testing.T) {
 	var fileSize int64 = 1 << 20 * 5 // 5 MiB
 	var jobs int = 2
 	var filename string = "data.bin"
@@ -39,13 +39,13 @@ func TestClient(t *testing.T) {
 	var file *os.File
 
 	ctx := context.Background()
-	br, err := NewRequest(filename)
+	br, err := NewRequest()
 	if err != nil {
 		t.Error(err)
 		return
 	}
 	br.SetJobs(jobs)
-	file, err = br.Fetch(ctx, ts.URL)
+	file, err = br.FetchFile(ctx, ts.URL, filename)
 	if err != nil {
 		t.Error(err)
 		return

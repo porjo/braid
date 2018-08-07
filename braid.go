@@ -60,16 +60,9 @@ type Stat struct {
 
 // NewRequest returns a new request.
 // Filename must be writable, will be created if missing and will be truncated.
-func NewRequest(filename string) (*Request, error) {
-	var err error
-
+func NewRequest() (*Request, error) {
 	r := &Request{
 		jobs: DefaultJobs,
-	}
-
-	r.file, err = os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0777)
-	if err != nil {
-		return nil, err
 	}
 
 	return r, nil
@@ -93,11 +86,16 @@ func (r *Request) Stats() Stat {
 	return stat
 }
 
-// Fetch fetches the resource, returning the result as an *os.File.
-func (r *Request) Fetch(ctx context.Context, url string) (*os.File, error) {
+// FetchFile fetches the resource, returning the result as an *os.File.
+func (r *Request) FetchFile(ctx context.Context, url, filename string) (*os.File, error) {
 	var err error
 	var length int
 	var res *http.Response
+
+	r.file, err = os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0777)
+	if err != nil {
+		return nil, err
+	}
 
 	r.url = url
 	res, err = http.Head(r.url)
@@ -133,7 +131,7 @@ func (r *Request) Fetch(ctx context.Context, url string) (*os.File, error) {
 		}
 
 		r.stats[i].TotalBytes = int64(max - min)
-		go r.fetch(ctx, min, max, i)
+		go r.fetchFile(ctx, min, max, i)
 
 	}
 	r.wg.Wait()
@@ -141,7 +139,7 @@ func (r *Request) Fetch(ctx context.Context, url string) (*os.File, error) {
 	return r.file, nil
 }
 
-func (r *Request) fetch(ctx context.Context, min int, max int, jobID int) {
+func (r *Request) fetchFile(ctx context.Context, min int, max int, jobID int) {
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", r.url, nil)
 	if err != nil {

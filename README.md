@@ -11,9 +11,9 @@ Example:
 	var b *braid.Request
 	var f *os.File
 
+	b, _ = braid.NewRequest()
 	ctx := context.Background()
-	b, _ = braid.NewRequest(ctx, filename)
-	f, _ = b.Fetch(url)
+	f, _ = b.FetchFile(ctx, url, filename)
 ```
 
 See `client/client.go` for a working example.

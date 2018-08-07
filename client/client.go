@@ -45,7 +45,7 @@ func main() {
 
 	var r *braid.Request
 	ctx := context.Background()
-	r, err = braid.NewRequest(filename)
+	r, err = braid.NewRequest()
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -57,7 +57,7 @@ func main() {
 	go func() {
 		Progress(quitChan, r)
 	}()
-	_, err = r.Fetch(ctx, url)
+	_, err = r.FetchFile(ctx, url, filename)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
