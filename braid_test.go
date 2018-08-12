@@ -45,21 +45,28 @@ func TestFetchFile(t *testing.T) {
 		return
 	}
 	br.SetJobs(jobs)
+
+	logOut := ""
+	logger := func(a string, b ...interface{}) {
+		logOut += fmt.Sprintf(a, b)
+	}
+
+	SetLogger(logger)
 	file, err = br.FetchFile(ctx, ts.URL, filename)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 
-	var stat os.FileInfo
-	stat, err = file.Stat()
+	var fstat os.FileInfo
+	fstat, err = file.Stat()
 	if err != nil {
 		t.Error(err)
 		return
 	}
 
-	if stat.Size() != fileSize {
-		t.Errorf("downloaded file size %d does not match server file size %d", stat.Size(), fileSize)
+	if fstat.Size() != fileSize {
+		t.Errorf("downloaded file size %d does not match server file size %d", fstat.Size(), fileSize)
 		return
 	}
 
@@ -67,6 +74,23 @@ func TestFetchFile(t *testing.T) {
 	err = os.Remove(filename)
 	if err != nil {
 		t.Error(err)
+		return
+	}
+
+	// check braid stats match
+
+	if br.Stats().TotalBytes != fileSize {
+		t.Errorf("stats TotalBytes doesn't match filesize: expected %d, got %d\n", fileSize, br.Stats().TotalBytes)
+		return
+	}
+	if br.Stats().ReadBytes != fileSize {
+		t.Errorf("stats ReadBytes doesn't match filesize: expected %d, got %d\n", fileSize, br.Stats().ReadBytes)
+		return
+	}
+
+	// check something was logged
+	if logOut == "" {
+		t.Errorf("Braid.Logger log output was empty")
 		return
 	}
 }
