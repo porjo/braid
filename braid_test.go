@@ -41,8 +41,7 @@ func TestFetchFile(t *testing.T) {
 	ctx := context.Background()
 	br, err := NewRequest()
 	if err != nil {
-		t.Error(err)
-		return
+		t.Fatal(err)
 	}
 	br.SetJobs(jobs)
 
@@ -54,44 +53,37 @@ func TestFetchFile(t *testing.T) {
 	SetLogger(logger)
 	file, err = br.FetchFile(ctx, ts.URL, filename)
 	if err != nil {
-		t.Error(err)
-		return
+		t.Fatal(err)
 	}
 
 	var fstat os.FileInfo
 	fstat, err = file.Stat()
 	if err != nil {
-		t.Error(err)
-		return
+		t.Fatal(err)
 	}
 
 	if fstat.Size() != fileSize {
-		t.Errorf("downloaded file size %d does not match server file size %d", fstat.Size(), fileSize)
-		return
+		t.Fatalf("downloaded file size %d does not match server file size %d", fstat.Size(), fileSize)
 	}
 
 	file.Close()
 	err = os.Remove(filename)
 	if err != nil {
-		t.Error(err)
-		return
+		t.Fatal(err)
 	}
 
 	// check braid stats match
 
 	if br.Stats().TotalBytes != fileSize {
-		t.Errorf("stats TotalBytes doesn't match filesize: expected %d, got %d\n", fileSize, br.Stats().TotalBytes)
-		return
+		t.Fatalf("stats TotalBytes doesn't match filesize: expected %d, got %d\n", fileSize, br.Stats().TotalBytes)
 	}
 	if br.Stats().ReadBytes != fileSize {
-		t.Errorf("stats ReadBytes doesn't match filesize: expected %d, got %d\n", fileSize, br.Stats().ReadBytes)
-		return
+		t.Fatalf("stats ReadBytes doesn't match filesize: expected %d, got %d\n", fileSize, br.Stats().ReadBytes)
 	}
 
 	// check something was logged
 	if logOut == "" {
-		t.Errorf("Braid.Logger log output was empty")
-		return
+		t.Fatalf("Braid.Logger log output was empty")
 	}
 }
 
