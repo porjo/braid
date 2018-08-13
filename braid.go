@@ -59,7 +59,6 @@ type Stat struct {
 }
 
 // NewRequest returns a new request.
-// Filename must be writable, will be created if missing and will be truncated.
 func NewRequest() (*Request, error) {
 	r := &Request{
 		jobs: DefaultJobs,
@@ -86,7 +85,9 @@ func (r *Request) Stats() Stat {
 	return stat
 }
 
-// FetchFile fetches the resource, returning the result as an *os.File.
+// FetchFile fetches the resource, returning the result as an *os.File
+// The caller is responsible for closing the returned file.
+// Filename must be writable, will be created if missing and will be truncated.
 func (r *Request) FetchFile(ctx context.Context, url, filename string) (*os.File, error) {
 	var err error
 	var length int
