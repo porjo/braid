@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
 	"time"
 )
@@ -89,11 +90,14 @@ func TestFetchFile(t *testing.T) {
 
 // data provides a way to generate a file of any size to be served by the test HTTP server
 type data struct {
+	sync.Mutex
 	size  int64
 	count int64
 }
 
 func (b *data) Read(p []byte) (int, error) {
+	b.Lock()
+	defer b.Unlock()
 	i := len(p)
 	if b.count+int64(i) > b.size {
 		i = int(b.size - b.count)
@@ -108,6 +112,8 @@ func (b *data) Read(p []byte) (int, error) {
 }
 
 func (b *data) Seek(o int64, w int) (int64, error) {
+	b.Lock()
+	defer b.Unlock()
 	if w == io.SeekEnd {
 		b.count = b.size - o
 	}
