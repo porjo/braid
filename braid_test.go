@@ -30,9 +30,16 @@ func TestFetchFile(t *testing.T) {
 	var fileSize int64 = 1 << 20 * 5 // 5 MiB
 	var jobs int = 2
 	var filename string = "data.bin"
+	var userAgent string = "braid test"
 
 	b := &data{size: fileSize} // 5MiB data
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		if r.UserAgent() != userAgent {
+			t.Errorf("User-Agent header doesn't match: expecting '%s', got '%s'\n", userAgent, r.UserAgent())
+			http.Error(w, "", 503)
+			return
+		}
 		http.ServeContent(w, r, filename, time.Now(), b)
 	}))
 	defer ts.Close()
@@ -45,6 +52,7 @@ func TestFetchFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	br.SetJobs(jobs)
+	br.SetUserAgent(userAgent)
 
 	logOut := ""
 	logger := func(a string, b ...interface{}) {

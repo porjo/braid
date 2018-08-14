@@ -43,10 +43,11 @@ func SetLogger(l Logger) {
 const DefaultJobs = 5
 
 type Request struct {
-	jobs int
-	url  string
-	wg   sync.WaitGroup
-	mu   sync.Mutex
+	jobs      int
+	url       string
+	wg        sync.WaitGroup
+	mu        sync.Mutex
+	userAgent string
 
 	// these are covered by mutex
 	file  *os.File
@@ -72,6 +73,11 @@ func (r *Request) SetJobs(jobs int) {
 	r.jobs = jobs
 }
 
+// SetUserAgent sets the 'User-Agent' HTTP header used when making requests
+func (r *Request) SetUserAgent(userAgent string) {
+	r.userAgent = userAgent
+}
+
 // Stats retrieves current statistics. It is thread safe and can be called from a goroutine.
 func (r *Request) Stats() Stat {
 	stat := Stat{}
@@ -91,6 +97,7 @@ func (r *Request) Stats() Stat {
 func (r *Request) FetchFile(ctx context.Context, url, filename string) (*os.File, error) {
 	var err error
 	var length int
+	var req *http.Request
 	var res *http.Response
 
 	r.file, err = os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0777)
@@ -99,7 +106,16 @@ func (r *Request) FetchFile(ctx context.Context, url, filename string) (*os.File
 	}
 
 	r.url = url
-	res, err = http.Head(r.url)
+	client := &http.Client{}
+	req, err = http.NewRequest("HEAD", r.url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if r.userAgent != "" {
+		req.Header.Set("User-Agent", r.userAgent)
+	}
+	res, err = client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching HEAD: %s\n", err)
 	}
@@ -149,6 +165,10 @@ func (r *Request) fetchFile(ctx context.Context, min int, max int, jobID int) {
 	req = req.WithContext(ctx)
 	range_header := "bytes=" + strconv.Itoa(min) + "-" + strconv.Itoa(max-1)
 	req.Header.Add("Range", range_header)
+
+	if r.userAgent != "" {
+		req.Header.Set("User-Agent", r.userAgent)
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
