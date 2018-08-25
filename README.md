@@ -24,5 +24,5 @@ Example:
 	// f.Close()
 ```
 
-See `client/client.go` for a working example.
+See `cmd/braid/braid.go` for a working example.
 
