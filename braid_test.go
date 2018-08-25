@@ -96,6 +96,38 @@ func TestFetchFile(t *testing.T) {
 	}
 }
 
+func TestFetchFileFail(t *testing.T) {
+	var filename string = "data.bin"
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "", 500)
+	}))
+	defer ts.Close()
+
+	var file *os.File
+
+	ctx := context.Background()
+	br, err := NewRequest()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	logOut := ""
+	logger := func(a string, b ...interface{}) {
+		logOut += fmt.Sprintf(a, b)
+	}
+
+	SetLogger(logger)
+	file, err = br.FetchFile(ctx, ts.URL, filename)
+	if err == nil {
+		t.Fatalf("Expecting error from FetchFile but got nil")
+	}
+	file.Close()
+	err = os.Remove(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 // data provides a way to generate a file of any size to be served by the test HTTP server
 type data struct {
 	sync.Mutex

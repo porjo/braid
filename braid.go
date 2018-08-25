@@ -138,6 +138,7 @@ func (r *Request) FetchFile(ctx context.Context, url, filename string) (*os.File
 	logger("fetching %s\n", r.url)
 	logger("launching %d jobs\n", r.jobs)
 
+	errChan := make(chan error)
 	for i := 0; i < r.jobs; i++ {
 
 		min := chunkSize * i
@@ -148,18 +149,39 @@ func (r *Request) FetchFile(ctx context.Context, url, filename string) (*os.File
 		}
 
 		r.stats[i].TotalBytes = int64(max - min)
-		go r.fetchFile(ctx, min, max, i)
+		go r.fetchFile(ctx, min, max, i, errChan)
 
 	}
-	r.wg.Wait()
 
-	return r.file, nil
+	quitChan := make(chan struct{})
+	errors := ""
+	go func() {
+		for {
+			select {
+			case err := <-errChan:
+				errors += "\n" + err.Error()
+			case <-quitChan:
+				return
+			}
+		}
+	}()
+
+	r.wg.Wait()
+	close(quitChan)
+
+	if errors != "" {
+		return r.file, fmt.Errorf("%s", errors)
+	} else {
+		return r.file, nil
+	}
 }
 
-func (r *Request) fetchFile(ctx context.Context, min int, max int, jobID int) {
+func (r *Request) fetchFile(ctx context.Context, min int, max int, jobID int, errChan chan error) {
+	defer r.wg.Done()
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", r.url, nil)
 	if err != nil {
+		errChan <- err
 		return
 	}
 	req = req.WithContext(ctx)
@@ -172,6 +194,7 @@ func (r *Request) fetchFile(ctx context.Context, min int, max int, jobID int) {
 
 	resp, err := client.Do(req)
 	if err != nil {
+		errChan <- err
 		return
 	}
 	defer resp.Body.Close()
@@ -196,6 +219,7 @@ func (r *Request) fetchFile(ctx context.Context, min int, max int, jobID int) {
 		r.stats[jobID].ReadBytes = int64(read)
 		r.mu.Unlock()
 		if err != nil {
+			errChan <- err
 			return
 		}
 
@@ -208,5 +232,4 @@ func (r *Request) fetchFile(ctx context.Context, min int, max int, jobID int) {
 			break
 		}
 	}
-	r.wg.Done()
 }
