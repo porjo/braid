@@ -11,9 +11,17 @@ Example:
 	var b *braid.Request
 	var f *os.File
 
-	b, _ = braid.NewRequest()
+	b, err = braid.NewRequest()
+	if err != nil {
+		os.Exit(err)
+	}
+	b.SetJobs(3) // set number of parallel requests. Defaults to 5
 	ctx := context.Background()
-	f, _ = b.FetchFile(ctx, url, filename)
+	f, err = b.FetchFile(ctx, url, filename)
+	if err != nil {
+		os.Exit(err)
+	}
+	// f.Close()
 ```
 
 See `client/client.go` for a working example.
