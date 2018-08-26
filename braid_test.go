@@ -27,7 +27,7 @@ import (
 )
 
 func TestFetchFile(t *testing.T) {
-	var fileSize int64 = 1 << 20 * 5 // 5 MiB
+	var fileSize int64 = 5 << 20 // 5 MiB
 	var jobs int = 2
 	var filename string = "data.bin"
 	var userAgent string = "braid test"
