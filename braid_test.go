@@ -32,7 +32,6 @@ func TestFetchFile(t *testing.T) {
 	var filename string = "data.bin"
 	var userAgent string = "braid test"
 
-	b := &data{size: fileSize} // 5MiB data
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 		if r.UserAgent() != userAgent {
@@ -40,13 +39,13 @@ func TestFetchFile(t *testing.T) {
 			http.Error(w, "", 503)
 			return
 		}
+		b := &data{size: fileSize} // 5MiB data
 		http.ServeContent(w, r, filename, time.Now(), b)
 	}))
 	defer ts.Close()
 
 	var file *os.File
 
-	ctx := context.Background()
 	br, err := NewRequest()
 	if err != nil {
 		t.Fatal(err)
@@ -60,6 +59,7 @@ func TestFetchFile(t *testing.T) {
 	}
 
 	SetLogger(logger)
+	ctx := context.Background()
 	file, err = br.FetchFile(ctx, ts.URL, filename)
 	if err != nil {
 		t.Fatal(err)
@@ -97,15 +97,16 @@ func TestFetchFile(t *testing.T) {
 }
 
 func TestFetchFileFail(t *testing.T) {
+	var fileSize int64 = 5 << 20 // 5 MiB
 	var filename string = "data.bin"
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "", 500)
+		b := &data{fail: true, size: fileSize} // 5MiB data
+		http.ServeContent(w, r, filename, time.Now(), b)
 	}))
 	defer ts.Close()
 
 	var file *os.File
 
-	ctx := context.Background()
 	br, err := NewRequest()
 	if err != nil {
 		t.Fatal(err)
@@ -117,10 +118,12 @@ func TestFetchFileFail(t *testing.T) {
 	}
 
 	SetLogger(logger)
+	ctx := context.Background()
 	file, err = br.FetchFile(ctx, ts.URL, filename)
 	if err == nil {
 		t.Fatalf("Expecting error from FetchFile but got nil")
 	}
+	t.Logf("FetchFile err %s\n", err)
 	file.Close()
 	err = os.Remove(filename)
 	if err != nil {
@@ -133,35 +136,43 @@ type data struct {
 	sync.Mutex
 	size  int64
 	count int64
+	fail  bool
 }
 
 func (b *data) Read(p []byte) (int, error) {
+
+	if b.fail {
+		return 0, fmt.Errorf("dummy fail")
+	}
 	b.Lock()
 	defer b.Unlock()
+
 	i := len(p)
-	if b.count+int64(i) > b.size {
+	if b.count+int64(len(p)) > b.size {
 		i = int(b.size - b.count)
 	}
-	if i == 0 {
-		return 0, io.EOF
-	}
+	// copy zeros into p
 	a := make([]byte, i)
 	copy(a, p)
 	b.count += int64(i)
+
+	if b.size == b.count {
+		return i, io.EOF
+	}
 	return i, nil
 }
 
 func (b *data) Seek(o int64, w int) (int64, error) {
+
 	b.Lock()
 	defer b.Unlock()
-	if w == io.SeekEnd {
-		b.count = b.size - o
-	}
-	if w == io.SeekCurrent {
-		b.count += o
-	}
-	if w == io.SeekStart {
+	switch w {
+	case io.SeekStart: // 0
 		b.count = o
+	case io.SeekCurrent: // 1
+		b.count += o
+	case io.SeekEnd: // 2
+		b.count = b.size - o
 	}
 
 	if b.count < 0 {

@@ -154,12 +154,19 @@ func (r *Request) FetchFile(ctx context.Context, url, filename string) (*os.File
 	}
 
 	quitChan := make(chan struct{})
+	var mu sync.Mutex
 	errors := ""
+
+	var errWg sync.WaitGroup
+	errWg.Add(1)
 	go func() {
+		defer errWg.Done()
 		for {
 			select {
 			case err := <-errChan:
-				errors += "\n" + err.Error()
+				mu.Lock()
+				errors += err.Error() + "\n"
+				mu.Unlock()
 			case <-quitChan:
 				return
 			}
@@ -168,7 +175,10 @@ func (r *Request) FetchFile(ctx context.Context, url, filename string) (*os.File
 
 	r.wg.Wait()
 	close(quitChan)
+	errWg.Wait()
 
+	mu.Lock()
+	defer mu.Unlock()
 	if errors != "" {
 		return r.file, fmt.Errorf("%s", errors)
 	} else {
@@ -209,6 +219,7 @@ func (r *Request) fetchFile(ctx context.Context, min int, max int, jobID int, er
 			if err == io.EOF {
 				end = true
 			} else {
+				errChan <- err
 				return
 			}
 		}
@@ -224,7 +235,9 @@ func (r *Request) fetchFile(ctx context.Context, min int, max int, jobID int, er
 		}
 
 		if count != len(line) {
-			logger("write error: expected %d bytes, got %d bytes\n", len(line), count)
+			err = fmt.Errorf("write error: expected %d bytes, got %d bytes\n", len(line), count)
+			logger(err.Error())
+			errChan <- err
 			return
 		}
 
