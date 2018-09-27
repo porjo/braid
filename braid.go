@@ -82,11 +82,11 @@ func (r *Request) SetUserAgent(userAgent string) {
 func (r *Request) Stats() Stat {
 	stat := Stat{}
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	for _, s := range r.stats {
 		stat.TotalBytes += s.TotalBytes
 		stat.ReadBytes += s.ReadBytes
 	}
-	r.mu.Unlock()
 
 	return stat
 }
@@ -132,7 +132,9 @@ func (r *Request) FetchFile(ctx context.Context, url, filename string) (*os.File
 	chunkSize := length / r.jobs
 	chunkSizeLast := length % r.jobs
 
+	r.mu.Lock()
 	r.stats = make([]Stat, r.jobs)
+	r.mu.Unlock()
 	r.wg.Add(r.jobs)
 
 	logger("fetching %s\n", r.url)
@@ -148,9 +150,10 @@ func (r *Request) FetchFile(ctx context.Context, url, filename string) (*os.File
 			max += chunkSizeLast
 		}
 
+		r.mu.Lock()
 		r.stats[i].TotalBytes = int64(max - min)
+		r.mu.Unlock()
 		go r.fetchFile(ctx, min, max, i, errChan)
-
 	}
 
 	quitChan := make(chan struct{})
@@ -224,9 +227,9 @@ func (r *Request) fetchFile(ctx context.Context, min int, max int, jobID int, er
 			}
 		}
 		var count int
-		r.mu.Lock()
 		count, err = r.file.WriteAt(line, int64(min+read))
 		read += len(line)
+		r.mu.Lock()
 		r.stats[jobID].ReadBytes = int64(read)
 		r.mu.Unlock()
 		if err != nil {
