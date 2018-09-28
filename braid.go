@@ -30,8 +30,8 @@ type Logger func(string, ...interface{})
 
 var logger Logger = func(a string, b ...interface{}) {}
 
-// SetLogger sets where log should be sent
-// by default log is muted
+// SetLogger sets where log should be sent.
+// By default log is muted
 func SetLogger(l Logger) {
 	// wrap supplied logger & prepend the library name
 	logger = func(a string, b ...interface{}) {

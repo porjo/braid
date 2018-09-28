@@ -22,7 +22,7 @@ Example:
 	if err != nil {
 		os.Exit(err)
 	}
-	// f.Close()
+	f.Close()
 ```
 
 See `cmd/braid/braid.go` for a working example.

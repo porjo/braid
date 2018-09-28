@@ -33,6 +33,7 @@ func main() {
 	var url, filename string
 	var jobs int
 	var err error
+	var file *os.File
 
 	flag.StringVar(&url, "url", "", "URL to fetch")
 	flag.IntVar(&jobs, "jobs", 5, "number of jobs")
@@ -59,11 +60,12 @@ func main() {
 	go func() {
 		Progress(quitChan, r)
 	}()
-	_, err = r.FetchFile(ctx, url, filename)
+	file, err = r.FetchFile(ctx, url, filename)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+	file.Close()
 	quit := make(chan struct{})
 	quitChan <- quit
 	<-quit
