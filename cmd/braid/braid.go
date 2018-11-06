@@ -53,13 +53,11 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	r.SetJobs(2)
+	r.SetJobs(jobs)
 	braid.SetLogger(log.Printf)
 	var quitChan chanChan
 	quitChan = make(chanChan)
-	go func() {
-		Progress(quitChan, r)
-	}()
+	go Progress(quitChan, r)
 	file, err = r.FetchFile(ctx, url, filename)
 	if err != nil {
 		fmt.Println(err)
